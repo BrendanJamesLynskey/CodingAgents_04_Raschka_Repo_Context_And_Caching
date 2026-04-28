@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodingAgents 04 &mdash; Live Repo Context &amp; Prompt-Cache Reuse</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a; --bg-card: #0d1117; --bg-code: #161b22;
+            --text-primary: #e6edf3; --text-secondary: #8b949e;
+            --accent: #76B900; --accent-dim: #76B90044; --accent-glow: #76B90033;
+            --warm: #ffa657; --warm-dim: rgba(255,166,87,0.14);
+            --bad:  #ff7b72;
+            --border: #21262d;
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+            --font-body: 'Inter', sans-serif;
+            --max-width: 900px;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body { background: var(--bg-primary); color: var(--text-primary);
+               font-family: var(--font-body); font-size: 17px; line-height: 1.7;
+               overflow-x: hidden; }
+        .hero { min-height: 100vh; display: flex; flex-direction: column;
+                justify-content: center; align-items: center;
+                padding: 2rem 1.5rem; text-align: center; position: relative; }
+        .hero::before { content: ''; position: absolute; top: 0; left: 50%;
+                        transform: translateX(-50%); width: 600px; height: 600px;
+                        background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+                        pointer-events: none; z-index: 0; }
+        .hero > * { position: relative; z-index: 1; }
+        .series-label { font-family: var(--font-mono); font-size: 0.85rem;
+                        color: var(--accent); letter-spacing: 0.15em;
+                        text-transform: uppercase; margin-bottom: 1rem; }
+        .hero h1 { font-family: var(--font-display);
+                   font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 700;
+                   color: var(--text-primary); line-height: 1.2; margin-bottom: 1rem; }
+        .hero h1 .accent { color: var(--accent); }
+        .hero .subtitle { font-size: 1.1rem; color: var(--text-secondary);
+                          max-width: 720px; margin-bottom: 2rem; }
+        .tags { display: flex; flex-wrap: wrap; gap: 0.5rem;
+                justify-content: center; margin-bottom: 2.5rem; }
+        .tag { font-family: var(--font-mono); font-size: 0.75rem;
+               padding: 0.25rem 0.75rem; border-radius: 999px;
+               border: 1px solid var(--accent); color: var(--accent);
+               background: var(--accent-dim); white-space: nowrap; }
+        .pipeline { display: flex; flex-wrap: wrap; align-items: center;
+                    justify-content: center; gap: 0.25rem; margin-bottom: 1rem;
+                    max-width: var(--max-width); }
+        .pipeline-step { font-family: var(--font-mono); font-size: 0.7rem;
+                         padding: 0.3rem 0.7rem; background: var(--bg-card);
+                         border: 1px solid var(--border); border-radius: 4px;
+                         color: var(--text-secondary); white-space: nowrap; }
+        .pipeline-arrow { color: var(--accent); font-size: 0.9rem; font-weight: 700; }
+        .slide { min-height: 100vh; max-width: var(--max-width);
+                 margin: 0 auto; padding: 4rem 1.5rem; position: relative;
+                 display: flex; flex-direction: column; justify-content: center; }
+        .slide-number { font-family: var(--font-display); font-size: 5rem;
+                        font-weight: 700; color: var(--accent-dim);
+                        position: absolute; top: 2rem; right: 1.5rem;
+                        line-height: 1; user-select: none; }
+        .slide h2 { font-family: var(--font-display); font-size: 1.9rem;
+                    font-weight: 700; color: var(--accent); margin-bottom: 1.5rem;
+                    line-height: 1.25; }
+        .slide h3 { font-family: var(--font-display); font-size: 1.3rem;
+                    font-weight: 600; color: var(--text-primary);
+                    margin-top: 1.5rem; margin-bottom: 0.75rem; }
+        .slide p { margin-bottom: 1rem; color: var(--text-secondary); }
+        .slide p strong { color: var(--text-primary); }
+        .slide ul, .slide ol { margin-bottom: 1rem; padding-left: 1.5rem;
+                               color: var(--text-secondary); }
+        .slide li { margin-bottom: 0.4rem; }
+        .slide li strong { color: var(--text-primary); }
+        .slide code { font-family: var(--font-mono); font-size: 0.88em;
+                      background: var(--bg-code); border: 1px solid var(--border);
+                      padding: 0.05rem 0.35rem; border-radius: 3px; color: #c9d1d9; }
+        .code-block { background: var(--bg-code); border: 1px solid var(--border);
+                      border-radius: 8px; margin: 1.25rem 0; overflow: hidden; }
+        .code-header { font-family: var(--font-mono); font-size: 0.75rem;
+                       color: var(--accent); background: rgba(118, 185, 0, 0.08);
+                       padding: 0.4rem 1rem; border-bottom: 1px solid var(--border); }
+        .code-block pre { margin: 0; padding: 1rem; overflow-x: auto; }
+        .code-block code { font-family: var(--font-mono); font-size: 0.85rem;
+                           line-height: 1.6; color: #c9d1d9; background: transparent;
+                           border: none; padding: 0; }
+        .kw { color: #ff7b72; } .fn { color: #d2a8ff; } .str { color: #a5d6ff; }
+        .cm { color: #8b949e; font-style: italic; } .num { color: #79c0ff; }
+        .type { color: #ffa657; }
+        .table-wrap { overflow-x: auto; margin: 1.25rem 0; border-radius: 8px;
+                      border: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { background: var(--bg-code); color: var(--accent); font-weight: 600;
+             text-align: left; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+             font-family: var(--font-display); white-space: nowrap; }
+        td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--border);
+             color: var(--text-secondary); }
+        tr:last-child td { border-bottom: none; }
+        tr:nth-child(even) td { background: rgba(13, 17, 23, 0.5); }
+        .diagram-vertical { display: flex; flex-direction: column; align-items: center;
+                            gap: 0.3rem; margin: 1.5rem 0; padding: 1.5rem;
+                            background: var(--bg-card); border: 1px solid var(--border);
+                            border-radius: 8px; }
+        .diagram-vertical .diagram-arrow { font-size: 1.1rem; }
+        .diagram-arrow { color: var(--accent); font-size: 1.3rem; font-weight: 700; }
+        .diagram-box { font-family: var(--font-mono); font-size: 0.85rem;
+                       padding: 0.5rem 1rem; background: var(--bg-code);
+                       border: 1px solid var(--border); border-radius: 6px;
+                       color: var(--text-primary); text-align: center; white-space: nowrap; }
+        .diagram-box.accent { border-color: var(--accent); color: var(--accent);
+                              background: rgba(118, 185, 0, 0.08); }
+        .diagram-grid { display: grid; gap: 0.75rem; margin: 1.5rem 0;
+                        padding: 1.5rem; background: var(--bg-card);
+                        border: 1px solid var(--border); border-radius: 8px; }
+        .diagram-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+        .diagram-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .diagram-panel { padding: 1rem; background: var(--bg-code);
+                         border: 1px solid var(--border); border-radius: 6px; }
+        .diagram-panel.accent-border { border-left: 3px solid var(--accent); }
+        .diagram-panel h4 { font-family: var(--font-display); font-size: 1rem;
+                            color: var(--accent); margin-bottom: 0.5rem; }
+        .diagram-panel p, .diagram-panel ul { font-size: 0.85rem; }
+        .callout { background: var(--bg-card); border-left: 3px solid var(--accent);
+                   border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.25rem 0; }
+        .callout p { margin-bottom: 0; }
+        .callout p + p { margin-top: 0.5rem; }
+        .callout .callout-label { font-family: var(--font-mono); font-size: 0.75rem;
+                                  color: var(--accent); text-transform: uppercase;
+                                  letter-spacing: 0.1em; margin-bottom: 0.3rem; }
+        .contents-list { list-style: none; padding-left: 0; counter-reset: contents; }
+        .contents-list li { counter-increment: contents; padding: 0.6rem 0;
+                            border-bottom: 1px solid var(--border);
+                            display: flex; align-items: center; gap: 1rem; }
+        .contents-list li:last-child { border-bottom: none; }
+        .contents-list li::before { content: counter(contents, decimal-leading-zero);
+                                    font-family: var(--font-mono); font-size: 0.85rem;
+                                    color: var(--accent); min-width: 2rem; }
+        .contents-list a { color: var(--text-primary); text-decoration: none;
+                           transition: color 0.2s; }
+        .contents-list a:hover { color: var(--accent); }
+        .footer { text-align: center; padding: 3rem 1.5rem;
+                  color: var(--text-secondary); font-size: 0.85rem;
+                  border-top: 1px solid var(--border); max-width: var(--max-width);
+                  margin: 0 auto; }
+        .footer a { color: var(--accent); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        .canvas-wrap { background: var(--bg-card); border: 1px solid var(--border);
+                       border-radius: 8px; padding: 1rem; margin: 1.25rem 0;
+                       overflow-x: auto; }
+        .canvas-wrap canvas, .canvas-wrap svg { display: block; margin: 0 auto;
+                                                 max-width: 100%; }
+        .badge { display: inline-block; font-family: var(--font-mono);
+                 font-size: 0.65rem; padding: 0.1rem 0.45rem; border-radius: 999px;
+                 border: 1px solid var(--border); color: var(--text-secondary);
+                 vertical-align: middle; margin-left: 0.3rem; }
+        .badge.ok    { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+        .badge.warn  { border-color: var(--warm); color: var(--warm); background: var(--warm-dim); }
+        .badge.bad   { border-color: var(--bad); color: var(--bad); background: rgba(255,123,114,0.08); }
+
+        /* Interactive prompt-shape visualiser */
+        .prompt-stack { display: flex; flex-direction: column; gap: 0.4rem;
+                        margin: 1.5rem 0; padding: 1.5rem; background: var(--bg-card);
+                        border: 1px solid var(--border); border-radius: 8px; }
+        .prompt-row { display: flex; align-items: stretch; gap: 0.5rem; cursor: pointer;
+                      transition: transform 0.15s; }
+        .prompt-row:hover { transform: translateX(4px); }
+        .prompt-row.active .prompt-bar { box-shadow: 0 0 0 2px var(--accent); }
+        .prompt-bar { flex: 1; padding: 0.6rem 0.9rem; border-radius: 4px;
+                      font-family: var(--font-mono); font-size: 0.78rem;
+                      display: flex; align-items: center; justify-content: space-between; }
+        .prompt-bar.cache-hot { background: rgba(118,185,0,0.16); border: 1px solid var(--accent); color: var(--accent); }
+        .prompt-bar.cache-warm { background: var(--warm-dim); border: 1px solid var(--warm); color: var(--warm); }
+        .prompt-bar.cache-cold { background: rgba(255,123,114,0.10); border: 1px solid var(--bad); color: var(--bad); }
+        .prompt-bar .tk { font-size: 0.7rem; opacity: 0.85; margin-left: 0.5rem; }
+        .prompt-detail { margin-top: 0.5rem; padding: 0.85rem 1rem; background: var(--bg-code);
+                         border: 1px solid var(--border); border-radius: 6px;
+                         color: var(--text-secondary); font-size: 0.88rem; min-height: 4rem; }
+        .prompt-legend { display: flex; gap: 0.75rem; flex-wrap: wrap;
+                         font-family: var(--font-mono); font-size: 0.7rem; margin-top: 0.5rem; }
+        .prompt-legend span { padding: 0.15rem 0.55rem; border-radius: 999px; border: 1px solid; }
+        .prompt-legend .l-hot  { color: var(--accent); border-color: var(--accent); }
+        .prompt-legend .l-warm { color: var(--warm); border-color: var(--warm); }
+        .prompt-legend .l-cold { color: var(--bad); border-color: var(--bad); }
+
+        /* Cost calculator */
+        .calc-card { background: var(--bg-card); border: 1px solid var(--border);
+                     border-left: 3px solid var(--accent); border-radius: 8px;
+                     padding: 1.25rem; margin: 1.25rem 0; }
+        .calc-card label { display: block; font-family: var(--font-mono); font-size: 0.78rem;
+                           color: var(--text-secondary); margin-bottom: 0.3rem; }
+        .calc-card input[type="range"] { width: 100%; accent-color: var(--accent); }
+        .calc-card .calc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.8rem; }
+        .calc-card .readout { font-family: var(--font-mono); font-size: 0.9rem; color: var(--accent); }
+        .calc-card .cost-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-top: 1rem; }
+        .calc-card .cost-cell { padding: 0.7rem; background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; }
+        .calc-card .cost-cell .lbl { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-secondary); }
+        .calc-card .cost-cell .val { font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin-top: 0.2rem; }
+        .calc-card .cost-cell.savings { border-left: 3px solid var(--accent); }
+        .calc-card .cost-cell.savings .val { color: var(--accent); }
+
+        @media (max-width: 640px) {
+            .slide { padding: 3rem 1rem; min-height: auto; }
+            .slide-number { font-size: 3rem; top: 1.5rem; right: 1rem; }
+            .slide h2 { font-size: 1.5rem; }
+            .diagram-grid.cols-2, .diagram-grid.cols-3 { grid-template-columns: 1fr; }
+            .calc-card .cost-grid, .calc-card .calc-row { grid-template-columns: 1fr; }
+            .pipeline { gap: 0.15rem; }
+            .pipeline-step { font-size: 0.6rem; padding: 0.2rem 0.4rem; }
+            .hero h1 { font-size: 1.8rem; }
+            table { font-size: 0.78rem; }
+        }
+    </style>
+</head>
+<body>
+<header class="hero">
+    <div class="series-label">Coding Agents Internals Series &mdash; Presentation 04</div>
+    <h1>Live Repo Context &amp; the <span class="accent">Prompt Cache</span></h1>
+    <p class="subtitle">Companion deck for Components&nbsp;1 + 2 of Sebastian Raschka&rsquo;s essay. What goes into a workspace summary, why the prompt is split into a stable prefix and a changing tail, and how the Anthropic / OpenAI prompt cache turns thousands of repeated tokens into a near-zero recurring cost.</p>
+    <div class="tags">
+        <span class="tag">Workspace summary</span>
+        <span class="tag">Prompt prefix</span>
+        <span class="tag">Anthropic cache</span>
+        <span class="tag">5-min TTL</span>
+        <span class="tag">CLAUDE.md</span>
+        <span class="tag">AGENTS.md</span>
+    </div>
+    <div class="pipeline">
+        <span class="pipeline-step">Repo</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Workspace summary</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Stable prefix</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Cache breakpoint</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Session state</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">User turn</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">LLM</span>
+    </div>
+</header>
+
+<section class="slide" id="slide-00">
+    <div class="slide-number">00</div>
+    <h2>Topics We&rsquo;ll Cover</h2>
+    <ul class="contents-list">
+        <li><a href="#slide-01">The &ldquo;Fix the Tests&rdquo; Problem &mdash; Why Bare Prompts Fail</a></li>
+        <li><a href="#slide-02">Anatomy of a Workspace Summary</a></li>
+        <li><a href="#slide-03">Stable Facts vs Changing Facts</a></li>
+        <li><a href="#slide-04">Prompt-Shape Architecture</a></li>
+        <li><a href="#slide-05">Interactive: Walk Through a Real Prompt</a></li>
+        <li><a href="#slide-06">Prompt-Cache Mechanics &mdash; What You Actually Pay</a></li>
+        <li><a href="#slide-07">Interactive: Cache-Hit Cost Calculator</a></li>
+        <li><a href="#slide-08">Pitfalls &mdash; What Breaks the Cache</a></li>
+        <li><a href="#slide-09">Practical Patterns You Can Steal</a></li>
+        <li><a href="#slide-10">Things to Try Yourself</a></li>
+    </ul>
+</section>
+
+<section class="slide" id="slide-01">
+    <div class="slide-number">01</div>
+    <h2>The &ldquo;Fix the Tests&rdquo; Problem</h2>
+    <p>Raschka opens Component&nbsp;1 with a small but devastating example. A user types <em>&ldquo;fix the tests&rdquo;</em>. To a competent human colleague this is enough: they know the language, the test runner, the recent changes, the project conventions. To an LLM with nothing but the message, it is unsolvable.</p>
+
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel accent-border">
+            <h4>What the LLM is missing</h4>
+            <ul>
+                <li>Which tests are failing &mdash; or how to find them.</li>
+                <li>The test command &mdash; <code>pytest</code>? <code>cargo test</code>? <code>npm test</code>? something custom?</li>
+                <li>The repo layout &mdash; where is the source vs the tests?</li>
+                <li>Project conventions &mdash; lint rules, type checking, commit style.</li>
+                <li>The current Git branch and what just changed.</li>
+            </ul>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>What the agent needs</h4>
+            <p>A <strong>workspace summary</strong> &mdash; what Raschka calls &ldquo;stable facts&rdquo;. Built once, at session start. Cheap to keep around. Carries <em>most</em> of what a colleague would know without being told.</p>
+            <p style="margin-top:0.6rem;">The user message then becomes a <em>delta on top of</em> a known context, not a complete brief in itself.</p>
+        </div>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">A telling phrase from the article</div>
+        <p>Raschka writes that the agent &ldquo;collects info (&lsquo;stable facts&rsquo; as a workspace summary) upfront before doing any work&rdquo; precisely so that it does not start &ldquo;from zero, without context, on every prompt&rdquo;. <strong>Most</strong> of the engineering effort in Component&nbsp;1 is choosing what counts as a stable fact and how to surface it cheaply.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-02">
+    <div class="slide-number">02</div>
+    <h2>Anatomy of a Workspace Summary</h2>
+    <p>What does a real coding agent put in its workspace summary? Let&rsquo;s reverse-engineer it from observable behaviour. Here is roughly what Claude Code reads on session start in a typical Python repo (~2&nbsp;kLOC, mixed src/tests).</p>
+
+    <div class="code-block">
+        <div class="code-header">workspace_summary.md &mdash; observed Claude Code session-start payload</div>
+<pre><code><span class="cm"># Workspace summary &mdash; built once at session start</span>
+
+<span class="kw">project</span>:
+  <span class="kw">name</span>: <span class="str">connection-pool</span>
+  <span class="kw">root</span>:  <span class="str">/home/user/code/connection-pool</span>
+  <span class="kw">vcs</span>:   <span class="str">git, branch=feat/idle-eviction, ahead 3 commits of main</span>
+
+<span class="kw">tooling</span>:
+  <span class="kw">language</span>: <span class="str">Python 3.12</span>
+  <span class="kw">build</span>:    <span class="str">uv (pyproject.toml)</span>
+  <span class="kw">test</span>:     <span class="str">pytest -q</span>
+  <span class="kw">lint</span>:     <span class="str">ruff check, ruff format</span>
+  <span class="kw">types</span>:    <span class="str">pyright (strict)</span>
+
+<span class="kw">layout</span>:
+  - src/                 <span class="cm"># 14 Python files, 1 821 LOC</span>
+  - src/db/pool.py       <span class="cm"># core class, 412 LOC</span>
+  - src/db/migrations.py
+  - tests/               <span class="cm"># 23 test files, 2 104 LOC</span>
+  - docs/architecture.md <span class="cm"># 180 LOC, last modified 8 days ago</span>
+
+<span class="kw">conventions</span>:                 <span class="cm"># pulled from CLAUDE.md / AGENTS.md / README</span>
+  - <span class="str">"All public methods must have type hints and a 1-line docstring."</span>
+  - <span class="str">"PRs run pytest + ruff + pyright; CI fails on any error."</span>
+  - <span class="str">"Avoid mocking the database; use a real Postgres in test fixtures."</span>
+
+<span class="kw">recent_change</span>:                <span class="cm"># last commit summary</span>
+  <span class="kw">sha</span>: <span class="str">3a91f0c</span>
+  <span class="kw">title</span>: <span class="str">"add idle-connection eviction; tests pending"</span></code></pre>
+    </div>
+
+    <h3>What goes in, what stays out</h3>
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel accent-border">
+            <h4>In &mdash; cheap, stable, useful</h4>
+            <ul>
+                <li>Project name, language, build/test commands.</li>
+                <li>Top-level directory structure to depth 2&ndash;3.</li>
+                <li>Identified key files (largest, most-imported, recently changed).</li>
+                <li>Conventions from <code>CLAUDE.md</code> / <code>AGENTS.md</code> / <code>CONTRIBUTING.md</code>.</li>
+                <li>Branch and most-recent commit, succinctly.</li>
+            </ul>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Out &mdash; expensive, unstable, or noisy</h4>
+            <ul>
+                <li>Full file contents (load on demand via tools).</li>
+                <li>Long Git history (the harness can run <code>git log</code> later).</li>
+                <li>Build artefacts, <code>node_modules</code>, generated code.</li>
+                <li>Secrets, env vars, anything from <code>.env</code> or password managers.</li>
+                <li>Output of any command that takes &gt;1&nbsp;s &mdash; defer to a tool call.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">Where harnesses differ</div>
+        <p>Aider precomputes a <strong>repo map</strong> (ctags + PageRank) and inlines it. Cursor builds an embedding index server-side and exposes <code>@codebase</code>. Claude Code does almost no precomputation &mdash; it relies on <code>CLAUDE.md</code> + a few directory listings + tool-call retrieval. Codex emphasises an <code>AGENTS.md</code> at the repo root. All four are different bets about how much to do at session start vs on demand.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-03">
+    <div class="slide-number">03</div>
+    <h2>Stable Facts vs Changing Facts</h2>
+    <p>Component&nbsp;2 in Raschka&rsquo;s essay zooms in on a critical detail: <em>not all of the prompt changes between turns</em>. Some of it is set once and reused for the entire session; some of it accumulates with every new tool call; some of it is regenerated every turn. Sorting these into the right order is the single biggest cost-and-quality lever in a coding harness.</p>
+
+    <div class="diagram-vertical">
+        <div class="diagram-box accent">System &amp; instructions &mdash; stable for the entire deployment</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box accent">Tool definitions &mdash; stable until tools change (rarely)</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box accent">Workspace summary &mdash; stable for the session</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box">Compact transcript &mdash; grows with each turn</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box">Working memory &mdash; updates each turn</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box">Latest tool result &mdash; only this turn</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box">User message &mdash; only this turn</div>
+    </div>
+
+    <h3>Cache lifetimes for each layer</h3>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Layer</th><th>Lifetime</th><th>Typical size</th><th>Cacheable?</th></tr></thead>
+            <tbody>
+                <tr><td>System &amp; instructions</td><td>Days&ndash;months (rarely changes)</td><td>500&ndash;2&nbsp;000 tokens</td><td>Yes &mdash; place first <span class="badge ok">hot</span></td></tr>
+                <tr><td>Tool definitions</td><td>Days&ndash;weeks</td><td>1&nbsp;000&ndash;4&nbsp;000 tokens</td><td>Yes &mdash; place after system <span class="badge ok">hot</span></td></tr>
+                <tr><td>Workspace summary</td><td>Per-session (~hours)</td><td>500&ndash;2&nbsp;000 tokens</td><td>Yes &mdash; place at end of prefix <span class="badge ok">hot</span></td></tr>
+                <tr><td>Compact transcript</td><td>Per-turn growth</td><td>500&ndash;5&nbsp;000 tokens</td><td>Partial &mdash; up to last cache breakpoint <span class="badge warn">warm</span></td></tr>
+                <tr><td>Working memory</td><td>Per-turn rewrite</td><td>200&ndash;800 tokens</td><td>No &mdash; changes every turn <span class="badge bad">cold</span></td></tr>
+                <tr><td>Latest tool result</td><td>This turn only</td><td>Variable, often clipped to ~1&nbsp;500 tokens</td><td>No <span class="badge bad">cold</span></td></tr>
+                <tr><td>User message</td><td>This turn only</td><td>20&ndash;500 tokens</td><td>No <span class="badge bad">cold</span></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">The architectural rule</div>
+        <p><strong>Sort by stability, descending.</strong> Stable layers go first; volatile layers go last. Place a cache breakpoint immediately after the last stable layer. Anything before the breakpoint is paid for once per session; anything after is paid for every turn. Get this ordering wrong and you pay full price on every turn for content the cache could have served.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-04">
+    <div class="slide-number">04</div>
+    <h2>Prompt-Shape Architecture</h2>
+    <p>This is Raschka&rsquo;s Figure&nbsp;7 redrawn. A single turn&rsquo;s prompt has three regions, separated by where the <em>cache breakpoint</em> sits.</p>
+
+    <div class="canvas-wrap">
+        <svg viewBox="0 0 720 280" width="720" height="280" xmlns="http://www.w3.org/2000/svg">
+            <style>
+                .reg     { stroke: #21262d; }
+                .reg-hot { fill: rgba(118,185,0,0.10); stroke: #76B900; }
+                .reg-wrm { fill: rgba(255,166,87,0.10); stroke: #ffa657; }
+                .reg-cld { fill: rgba(255,123,114,0.10); stroke: #ff7b72; }
+                .lbl    { fill: #e6edf3; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; }
+                .lblc   { fill: #76B900; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; }
+                .lblw   { fill: #ffa657; }
+                .lblb   { fill: #ff7b72; }
+                .sub    { fill: #8b949e; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+                .brk    { stroke: #76B900; stroke-width: 2; stroke-dasharray: 6 4; }
+                .brklbl { fill: #76B900; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+            </style>
+
+            <rect class="reg reg-hot" x="40"  y="30" width="640" height="86" rx="4"/>
+            <text class="lblc" x="60"  y="50">Stable prefix &mdash; cached</text>
+            <text class="sub" x="60"  y="68">system &middot; tool defs &middot; workspace summary &middot; conventions</text>
+            <text class="sub" x="60"  y="86">~3&nbsp;000&ndash;8&nbsp;000 tokens &middot; written once, read every turn at 10% cost</text>
+            <text class="sub" x="60"  y="104">cache key = exact prefix bytes, including order</text>
+
+            <line class="brk" x1="40" y1="120" x2="680" y2="120"/>
+            <text class="brklbl" x="690" y="124" text-anchor="end">cache breakpoint &uarr;</text>
+
+            <rect class="reg reg-wrm" x="40"  y="130" width="640" height="60" rx="4"/>
+            <text class="lbl lblw" x="60" y="150">Session state &mdash; partially cached</text>
+            <text class="sub" x="60"  y="168">compact transcript &middot; working memory file</text>
+            <text class="sub" x="60"  y="186">grows or rewrites each turn &middot; benefits from secondary breakpoint</text>
+
+            <rect class="reg reg-cld" x="40"  y="200" width="640" height="60" rx="4"/>
+            <text class="lbl lblb" x="60" y="220">Turn-local &mdash; uncached</text>
+            <text class="sub" x="60"  y="238">latest tool result &middot; user message &middot; control directives</text>
+            <text class="sub" x="60"  y="256">paid at full price every turn &mdash; keep it small</text>
+        </svg>
+    </div>
+
+    <h3>How a real Anthropic API call expresses this</h3>
+    <div class="code-block">
+        <div class="code-header">Python &mdash; using cache_control to mark the breakpoint</div>
+<pre><code><span class="kw">from</span> anthropic <span class="kw">import</span> Anthropic
+
+client = Anthropic()
+
+response = client.messages.create(
+    model=<span class="str">"claude-opus-4-7"</span>,
+    max_tokens=<span class="num">2048</span>,
+    system=[
+        {<span class="str">"type"</span>: <span class="str">"text"</span>, <span class="str">"text"</span>: SYSTEM_INSTRUCTIONS},        <span class="cm"># stable</span>
+        {<span class="str">"type"</span>: <span class="str">"text"</span>, <span class="str">"text"</span>: TOOL_DESCRIPTIONS},          <span class="cm"># stable</span>
+        {<span class="str">"type"</span>: <span class="str">"text"</span>, <span class="str">"text"</span>: WORKSPACE_SUMMARY,           <span class="cm"># stable for session</span>
+         <span class="str">"cache_control"</span>: {<span class="str">"type"</span>: <span class="str">"ephemeral"</span>}},    <span class="cm"># &larr; cache breakpoint</span>
+    ],
+    messages=[
+        *compact_transcript,                                 <span class="cm"># warm</span>
+        {<span class="str">"role"</span>: <span class="str">"user"</span>,
+         <span class="str">"content"</span>: working_memory_block + tool_result_block + user_msg},  <span class="cm"># cold</span>
+    ],
+    tools=TOOL_SCHEMAS,
+)
+
+<span class="cm"># Subsequent turns hit the cache and pay 0.10x for the prefix tokens.</span></code></pre>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">Why this is harness work, not user work</div>
+        <p>End users will never write <code>cache_control</code> directly. The <em>harness</em> arranges the prompt this way every turn so that the user just types <em>&ldquo;fix the tests&rdquo;</em> and the right architecture happens automatically. Raschka&rsquo;s point in Component&nbsp;2 is that this layout is not optional; it is what separates a usable harness from a wasteful one.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-05">
+    <div class="slide-number">05</div>
+    <h2>Interactive: Walk Through a Real Prompt</h2>
+    <p>Click any layer below to see what it contains, why it sits where it does, and whether it benefits from the cache. The colours match the diagram on the previous slide: <span style="color:var(--accent)">green = cache hot</span>, <span style="color:var(--warm)">orange = cache warm</span>, <span style="color:var(--bad)">red = cache cold</span>.</p>
+
+    <div class="prompt-stack">
+        <div class="prompt-row" data-key="sys">
+            <div class="prompt-bar cache-hot">
+                <span>SYSTEM &middot; instructions, persona, refusals</span><span class="tk">~ 1 200 tok</span>
+            </div>
+        </div>
+        <div class="prompt-row" data-key="tools">
+            <div class="prompt-bar cache-hot">
+                <span>TOOLS &middot; JSON schemas for read_file, write_file, bash, &hellip;</span><span class="tk">~ 2 800 tok</span>
+            </div>
+        </div>
+        <div class="prompt-row" data-key="ws">
+            <div class="prompt-bar cache-hot">
+                <span>WORKSPACE SUMMARY &middot; layout, conventions, branch (CACHE BREAKPOINT after)</span><span class="tk">~ 1 600 tok</span>
+            </div>
+        </div>
+        <div class="prompt-row" data-key="trans">
+            <div class="prompt-bar cache-warm">
+                <span>COMPACT TRANSCRIPT &middot; previous turns, summarised</span><span class="tk">~ 2 100 tok</span>
+            </div>
+        </div>
+        <div class="prompt-row" data-key="wm">
+            <div class="prompt-bar cache-warm">
+                <span>WORKING MEMORY &middot; current task, important files, notes</span><span class="tk">~ 600 tok</span>
+            </div>
+        </div>
+        <div class="prompt-row" data-key="tool">
+            <div class="prompt-bar cache-cold">
+                <span>LATEST TOOL RESULT &middot; output of last command</span><span class="tk">~ 900 tok</span>
+            </div>
+        </div>
+        <div class="prompt-row" data-key="user">
+            <div class="prompt-bar cache-cold">
+                <span>USER MESSAGE &middot; this turn&rsquo;s instruction</span><span class="tk">~ 80 tok</span>
+            </div>
+        </div>
+
+        <div class="prompt-detail" id="prompt-detail">
+            <strong>Click a layer above</strong> to see its role, lifetime, and cache status. Try them all &mdash; the difference between layers is the entire reason this architecture matters.
+        </div>
+
+        <div class="prompt-legend">
+            <span class="l-hot">cache hot &mdash; paid once, reused for session</span>
+            <span class="l-warm">cache warm &mdash; partially reusable</span>
+            <span class="l-cold">cache cold &mdash; full price every turn</span>
+        </div>
+    </div>
+
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem;"><em>Token estimates are illustrative for a typical Claude Code session on a small Python repo. Real values depend on the harness, model, and project size.</em></p>
+</section>
+
+<section class="slide" id="slide-06">
+    <div class="slide-number">06</div>
+    <h2>Prompt-Cache Mechanics &mdash; What You Actually Pay</h2>
+    <p>The economics behind Component&nbsp;2 only make sense if you know how the cache actually bills. The Anthropic API uses <em>ephemeral</em> caching with a default 5-minute TTL (an extended 1-hour TTL is also available with a higher write multiplier). OpenAI&rsquo;s mechanism is similar in spirit.</p>
+
+    <h3>The price multipliers (Anthropic, default 5-min TTL)</h3>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Operation</th><th>Cost multiplier</th><th>What it means</th></tr></thead>
+            <tbody>
+                <tr><td>Cache <strong>write</strong> &mdash; first time you submit a prefix</td><td>1.25&times; standard input price</td><td>You pay a 25% premium to populate the cache.</td></tr>
+                <tr><td>Cache <strong>read</strong> &mdash; subsequent turns within TTL</td><td>0.10&times; standard input price</td><td>Cached prefix tokens cost 10% of normal &mdash; a 10&times; reduction.</td></tr>
+                <tr><td>Cache <strong>miss</strong> &mdash; prefix changed by even 1 byte</td><td>1.00&times; standard input price</td><td>Full re-tokenisation; no benefit.</td></tr>
+                <tr><td>Cache <strong>refresh</strong> &mdash; new request resets the TTL</td><td>Free if prefix matches</td><td>Active sessions stay hot; idle ones expire after 5 min.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h3>Break-even analysis</h3>
+    <p>The 25% write premium is paid up front; the 10&times; reduction kicks in on subsequent turns. The break-even is therefore very low &mdash; just over <strong>one</strong> cache hit. Concretely:</p>
+
+    <div class="canvas-wrap">
+        <svg viewBox="0 0 660 220" width="660" height="220" xmlns="http://www.w3.org/2000/svg">
+            <style>
+                .ax { stroke: #30363d; stroke-width: 1; }
+                .gr { stroke: #ff7b72; stroke-width: 2; fill: none; }   /* no cache */
+                .ca { stroke: #76B900; stroke-width: 2; fill: none; }   /* with cache */
+                .lbl{ fill: #8b949e; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+                .leg{ font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 600; }
+                .ttl{ fill: #76B900; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; }
+                .pt-no { fill: #ff7b72; }
+                .pt-ca { fill: #76B900; }
+            </style>
+            <text class="ttl" x="20" y="22">Cumulative cost of a 5 000-token stable prefix vs turn count</text>
+
+            <line class="ax" x1="60" y1="40" x2="60" y2="180"/>
+            <line class="ax" x1="60" y1="180" x2="640" y2="180"/>
+
+            <!-- Cost lines: each unit = 1 prefix-cost, scaled to fit -->
+            <!-- no-cache: 1, 2, 3, ...10  -->
+            <!-- with-cache: 1.25, 1.35, 1.45, ...2.15 -->
+            <!-- map turn 1->100, turn 10->600; scale cost: 0->180, 10->40 (so 14px per cost unit) -->
+            <polyline class="gr" points="100,166 160,152 220,138 280,124 340,110 400,96 460,82 520,68 580,54 640,40"/>
+            <polyline class="ca" points="100,162.5 160,161.1 220,159.7 280,158.3 340,156.9 400,155.5 460,154.1 520,152.7 580,151.3 640,149.9"/>
+
+            <!-- points -->
+            <circle class="pt-no" cx="100" cy="166" r="3"/>
+            <circle class="pt-no" cx="640" cy="40" r="3"/>
+            <circle class="pt-ca" cx="100" cy="162.5" r="3"/>
+            <circle class="pt-ca" cx="640" cy="149.9" r="3"/>
+
+            <text class="lbl" x="100" y="195" text-anchor="middle">1</text>
+            <text class="lbl" x="370" y="195" text-anchor="middle">5</text>
+            <text class="lbl" x="640" y="195" text-anchor="middle">10 turns</text>
+            <text class="lbl" x="50"  y="44" text-anchor="end">10x</text>
+            <text class="lbl" x="50"  y="184" text-anchor="end">0</text>
+
+            <rect width="14" height="3" x="450" y="55" fill="#ff7b72"/>
+            <text class="leg" x="470" y="59" fill="#ff7b72">no cache</text>
+            <rect width="14" height="3" x="450" y="73" fill="#76B900"/>
+            <text class="leg" x="470" y="77" fill="#76B900">with cache</text>
+
+            <text class="lbl" x="540" y="138" fill="#76B900">~6&times; cheaper by turn 10</text>
+        </svg>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">A useful rule of thumb</div>
+        <p>For any system prompt + workspace summary <strong>&gt;1&nbsp;000 tokens</strong> that is <strong>reused 2 or more times</strong>, prompt caching is essentially free money. The interesting design question is not whether to cache &mdash; it is where to put the breakpoint and how to keep the prefix bit-stable across turns.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-07">
+    <div class="slide-number">07</div>
+    <h2>Interactive: Cache-Hit Cost Calculator</h2>
+    <p>Slide the inputs to see how cache geometry shapes a typical session. The calculator uses Anthropic&rsquo;s default multipliers (1.25&times; write, 0.10&times; read) on a 5-minute TTL.</p>
+
+    <div class="calc-card">
+        <div class="calc-row">
+            <div>
+                <label for="prefixSlider">Stable prefix size <span class="readout" id="prefixOut">5 000</span> tok</label>
+                <input id="prefixSlider" type="range" min="500" max="20000" step="500" value="5000">
+            </div>
+            <div>
+                <label for="turnsSlider">Turns in this session <span class="readout" id="turnsOut">12</span></label>
+                <input id="turnsSlider" type="range" min="1" max="60" step="1" value="12">
+            </div>
+        </div>
+        <div class="calc-row">
+            <div>
+                <label for="tailSlider">Per-turn changing tail <span class="readout" id="tailOut">1 200</span> tok</label>
+                <input id="tailSlider" type="range" min="100" max="6000" step="100" value="1200">
+            </div>
+            <div>
+                <label for="priceSlider">Input price per 1M tok ($) <span class="readout" id="priceOut">15.00</span></label>
+                <input id="priceSlider" type="range" min="1" max="30" step="0.5" value="15">
+            </div>
+        </div>
+
+        <div class="cost-grid">
+            <div class="cost-cell">
+                <div class="lbl">Without caching</div>
+                <div class="val" id="costNo">$0.00</div>
+            </div>
+            <div class="cost-cell">
+                <div class="lbl">With caching</div>
+                <div class="val" id="costCa">$0.00</div>
+            </div>
+            <div class="cost-cell savings">
+                <div class="lbl">Saved per session</div>
+                <div class="val" id="costSv">$0.00</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">What the calculator tells you</div>
+        <p>For a Claude Code-style session (5&nbsp;000-tok prefix, ~12 turns, ~1&nbsp;200 tok tail at $15/M input) caching saves roughly 70&ndash;80% of the input bill. Long sessions amortise the 25% write premium completely; short sessions still come out ahead on the second turn. <strong>Sessions of length 1</strong> are the only case where caching costs slightly more &mdash; and even those typically don&rsquo;t happen in practice for coding agents.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-08">
+    <div class="slide-number">08</div>
+    <h2>Pitfalls &mdash; What Breaks the Cache</h2>
+    <p>The cache is content-addressed: the cache key is the byte-for-byte prefix. Any of the following silently turn cache reads back into cache writes &mdash; an order of magnitude price increase, with no warning.</p>
+
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel accent-border">
+            <h4>Timestamps in the system prompt</h4>
+            <p>&ldquo;Today is 2026-04-28T09:35:12Z&rdquo; injected at the top of every turn destroys the cache. If you need a date, put it <em>after</em> the cache breakpoint, or round to the day.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Random JSON key ordering</h4>
+            <p>If your tool schema is regenerated each turn from a Python dict (which had its key order shuffled by a refactor), the prefix changes. Sort keys deterministically or freeze schemas at startup.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>User-message-dependent prefix</h4>
+            <p>Tempting to do &ldquo;if user mentions tests, add a tests-related instruction to the system prompt&rdquo;. This branches the prefix per turn and defeats the cache. Push the conditional content into the cold tail.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Whitespace and Unicode drift</h4>
+            <p>A trailing newline added by an editor, a tab vs spaces change, NFC/NFD normalisation differences &mdash; all change the byte stream. Diff your prefix between turns when caching mysteriously stops working.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>5-minute TTL idle</h4>
+            <p>If the user goes for coffee, the cache expires. The next turn pays the 1.25&times; write premium again. Long-form sessions benefit from the 1-hour TTL option even with its higher write multiplier.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Wrong breakpoint placement</h4>
+            <p>Putting the breakpoint <em>before</em> the workspace summary means the summary is recomputed every turn. Putting it <em>after</em> session-state is impossible (session state changes). The right place is <em>just after the last stable layer</em>.</p>
+        </div>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">A diagnostic worth running</div>
+        <p>Anthropic&rsquo;s API returns <code>usage.cache_creation_input_tokens</code> and <code>usage.cache_read_input_tokens</code> on every response. Log both per turn. If the read counter doesn&rsquo;t climb during a session, something is invalidating your prefix &mdash; usually one of the bullets above.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-09">
+    <div class="slide-number">09</div>
+    <h2>Practical Patterns You Can Steal</h2>
+    <p>Translating Components&nbsp;1 + 2 from concept to code. These are patterns I&rsquo;ve seen work in real harnesses; each maps to a specific design decision the article calls out.</p>
+
+    <h3>Pattern 1 &mdash; the <code>CLAUDE.md</code> / <code>AGENTS.md</code> root file</h3>
+    <p>A markdown file at the repo root that the harness inlines into the workspace summary. Costs nothing to maintain (it&rsquo;s just a doc), survives across sessions, and lives in version control where it can be reviewed alongside code changes. Treat it as <em>the harness&rsquo;s contract with the project</em>: conventions, commands, do-and-don&rsquo;ts.</p>
+
+    <div class="code-block">
+        <div class="code-header">CLAUDE.md &mdash; minimal but high-signal example</div>
+<pre><code><span class="cm"># CLAUDE.md</span>
+
+<span class="cm">## Repo conventions</span>
+- Test:  <span class="str">pytest -q --maxfail=1</span>
+- Lint:  <span class="str">ruff check . && ruff format --check .</span>
+- Types: <span class="str">pyright</span>
+
+<span class="cm">## Style</span>
+- Type-hint every public function.
+- Docstrings: 1 line for simple, full Google style for complex.
+- No mocking the database. Use the postgres fixture in <code>tests/conftest.py</code>.
+
+<span class="cm">## Where to look first</span>
+- Connection logic:  <code>src/db/pool.py</code>
+- Migrations:        <code>src/db/migrations.py</code>
+- Architecture doc:  <code>docs/architecture.md</code>
+
+<span class="cm">## Don&rsquo;t</span>
+- Don&rsquo;t edit <code>generated/</code> &mdash; regenerated by <code>make gen</code>.
+- Don&rsquo;t add new top-level packages without proposing in a comment first.</code></pre>
+    </div>
+
+    <h3>Pattern 2 &mdash; deterministic prefix builder</h3>
+    <p>A pure function <code>build_prefix(workspace) -&gt; bytes</code> that always produces the same bytes for the same workspace. Sort dicts, normalise newlines, strip trailing whitespace. Run it through a SHA-256 and log the digest each turn &mdash; if it changes, your cache will too.</p>
+
+    <h3>Pattern 3 &mdash; secondary breakpoint mid-session</h3>
+    <p>Anthropic supports up to four cache breakpoints. Put the second one immediately after the compact transcript: that way, even though the transcript grows, <em>the part of it that hasn&rsquo;t changed since last turn</em> is also cached. This is how long sessions stay cheap.</p>
+
+    <h3>Pattern 4 &mdash; round timestamps to coarse buckets</h3>
+    <p>If your prompt genuinely needs a date (auditing, prompt-injection-aware grounding), round to the day. <code>"today is 2026-04-28"</code> survives caching for 24 hours; <code>"now is 2026-04-28T09:35:12.741Z"</code> survives for one millisecond.</p>
+</section>
+
+<section class="slide" id="slide-10">
+    <div class="slide-number">10</div>
+    <h2>Things to Try Yourself</h2>
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel accent-border">
+            <h4>Audit one of your prompts</h4>
+            <p>Take a real prompt your code already builds. Print it. Highlight in three colours: hot (truly stable), warm (reusable until session changes), cold (changes every turn). Most prompts have at least one cold thing wedged into a hot region.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Write a CLAUDE.md for a small project</h4>
+            <p>Pick a side project. Write the smallest <code>CLAUDE.md</code> you would actually rely on. Use Claude Code or Cursor against it for a week. Notice which lines you find yourself adding &mdash; those are the actual conventions of the project.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Plot your cache hit rate over time</h4>
+            <p>Log <code>cache_creation_input_tokens</code> and <code>cache_read_input_tokens</code> per turn. Plot the ratio. A healthy session reaches &gt;80% reads within 2&ndash;3 turns. If yours doesn&rsquo;t, something is breaking the prefix.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Build the deterministic prefix builder</h4>
+            <p>Write a pure function in 30 lines that takes a workspace dict and returns the prefix bytes plus a SHA-256. Make it part of your test suite: same input &Rarr; same digest. This catches subtle regressions instantly.</p>
+        </div>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">Where this leads</div>
+        <p>Once you have a stable prefix and a working cache, the next bottleneck moves to <strong>what the model is allowed to do</strong> in each turn. That is Component&nbsp;3 &mdash; tool access &mdash; covered in the next deck.</p>
+    </div>
+
+    <p style="text-align: center; margin-top: 2rem;">
+        <a class="ref-link" href="https://brendanjameslynskey.github.io/CodingAgents_05_Raschka_Tool_Use/" style="display:inline-block; padding: 0.4rem 0.8rem; border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; text-decoration: none; font-family: var(--font-mono); font-size: 0.8rem;">Next deck &rarr; Tool Access &amp; Use</a>
+    </p>
+</section>
+
+<footer class="footer">
+    <p>Companion to <a href="https://magazine.sebastianraschka.com/p/components-of-a-coding-agent" target="_blank" rel="noopener">Sebastian Raschka, &ldquo;Components of a Coding Agent&rdquo;</a> &mdash; Components 1 &amp; 2</p>
+    <p>Part of the <a href="https://github.com/BrendanJamesLynskey/LLM_Hub_Coding_Agents">Coding Agents Internals Series</a></p>
+    <p style="margin-top: 0.5rem; font-size: 0.8rem;"><a href="https://github.com/BrendanJamesLynskey/LLM_Hub_Coding_Agents">Back to Series Index</a></p>
+</footer>
+
+<script>
+    // Smooth scroll
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+
+    // Slide-in animation
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+            }
+        });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.slide').forEach(slide => {
+        slide.style.opacity = '0';
+        slide.style.transform = 'translateY(30px)';
+        slide.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(slide);
+    });
+
+    // Interactive prompt-stack
+    const promptDetail = {
+        sys:   { t: 'System &amp; Instructions',
+                 c: 'cache hot',
+                 d: 'Persona, refusal rules, output style. Set once when the harness is deployed and rarely changed. Lives at the very top of every prompt and benefits maximally from caching. Typical Anthropic-style harness: 800&ndash;2 000 tokens.' },
+        tools: { t: 'Tool Definitions',
+                 c: 'cache hot',
+                 d: 'JSON schemas for every tool the agent can call &mdash; <code>read_file</code>, <code>write_file</code>, <code>bash</code>, <code>search</code>, <code>spawn_subagent</code>. Stable until you ship a new harness version. Frequently the largest stable layer (2 000&ndash;5 000 tokens) and the one that pays back caching the most.' },
+        ws:    { t: 'Workspace Summary',
+                 c: 'cache hot',
+                 d: 'Built once at session start: layout, conventions (from <code>CLAUDE.md</code>), branch, recent commit summary. The cache breakpoint goes <em>immediately after</em> this layer &mdash; it is the last thing that is stable for the whole session.' },
+        trans: { t: 'Compact Transcript',
+                 c: 'cache warm',
+                 d: 'Earlier turns of the session, summarised. Grows monotonically across turns. With a secondary breakpoint placed after each turn, the older portion stays cached and only the newest entry is paid at full price.' },
+        wm:    { t: 'Working Memory',
+                 c: 'cache warm',
+                 d: 'A small, distilled state file (current task, important files, notes). Rewritten each turn but typically only 200&ndash;800 tokens, so the cost of rewriting it is small.' },
+        tool:  { t: 'Latest Tool Result',
+                 c: 'cache cold',
+                 d: 'The output of the most recent tool call &mdash; a file read, a test failure, a shell command result. Usually clipped (Component&nbsp;4) before insertion. Paid at full input price every turn; this is the budget you most want to manage.' },
+        user:  { t: 'User Message',
+                 c: 'cache cold',
+                 d: 'The message the user just typed. Tiny but always uncached. Place last so caching does not need to reorder anything when it arrives.' },
+    };
+    const detailBox = document.getElementById('prompt-detail');
+    document.querySelectorAll('.prompt-row').forEach(row => {
+        row.addEventListener('click', () => {
+            document.querySelectorAll('.prompt-row').forEach(r => r.classList.remove('active'));
+            row.classList.add('active');
+            const k = row.dataset.key;
+            const info = promptDetail[k];
+            detailBox.innerHTML = '<strong>' + info.t + '</strong> &middot; <em>' + info.c + '</em><br><br>' + info.d;
+        });
+    });
+
+    // Cost calculator
+    function fmt(x) { return '$' + x.toFixed(2); }
+    function recompute() {
+        const prefix = +document.getElementById('prefixSlider').value;
+        const turns  = +document.getElementById('turnsSlider').value;
+        const tail   = +document.getElementById('tailSlider').value;
+        const price  = +document.getElementById('priceSlider').value;
+        document.getElementById('prefixOut').textContent = prefix.toLocaleString();
+        document.getElementById('turnsOut').textContent  = turns;
+        document.getElementById('tailOut').textContent   = tail.toLocaleString();
+        document.getElementById('priceOut').textContent  = price.toFixed(2);
+
+        const perTok = price / 1_000_000;
+
+        // No caching: every turn pays full price for prefix + tail
+        const costNo = turns * (prefix + tail) * perTok;
+
+        // With caching: turn 1 pays 1.25x prefix + tail; subsequent pay 0.10x prefix + tail
+        const costCa = (1.25 * prefix + tail) * perTok
+                     + (turns - 1) * (0.10 * prefix + tail) * perTok;
+
+        const saved = costNo - costCa;
+
+        document.getElementById('costNo').textContent = fmt(costNo);
+        document.getElementById('costCa').textContent = fmt(costCa);
+        document.getElementById('costSv').textContent = fmt(saved);
+    }
+    ['prefixSlider','turnsSlider','tailSlider','priceSlider'].forEach(id => {
+        document.getElementById(id).addEventListener('input', recompute);
+    });
+    recompute();
+</script>
+</body>
+</html>
