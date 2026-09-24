@@ -9,12 +9,12 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #0a0a0a; --bg-card: #0d1117; --bg-code: #161b22;
-            --text-primary: #e6edf3; --text-secondary: #8b949e;
-            --accent: #76B900; --accent-dim: #76B90044; --accent-glow: #76B90033;
-            --warm: #ffa657; --warm-dim: rgba(255,166,87,0.14);
-            --bad:  #ff7b72;
-            --border: #21262d;
+            --bg-primary: #1c1815; --bg-card: #231e1a; --bg-code: #2b2520;
+            --text-primary: #efe8dc; --text-secondary: #a2978b;
+            --accent: #aabd59; --accent-dim: #aabd5944; --accent-glow: #aabd5933;
+            --warm: #e3b174; --warm-dim: rgba(227,177,116,0.14);
+            --bad:  #de805a;
+            --border: #3a322b;
             --font-display: 'Space Grotesk', sans-serif;
             --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
             --font-body: 'Inter', sans-serif;
@@ -77,19 +77,19 @@
         .slide li strong { color: var(--text-primary); }
         .slide code { font-family: var(--font-mono); font-size: 0.88em;
                       background: var(--bg-code); border: 1px solid var(--border);
-                      padding: 0.05rem 0.35rem; border-radius: 3px; color: #c9d1d9; }
+                      padding: 0.05rem 0.35rem; border-radius: 3px; color: #dad1c5; }
         .code-block { background: var(--bg-code); border: 1px solid var(--border);
                       border-radius: 8px; margin: 1.25rem 0; overflow: hidden; }
         .code-header { font-family: var(--font-mono); font-size: 0.75rem;
-                       color: var(--accent); background: rgba(118, 185, 0, 0.08);
+                       color: var(--accent); background: rgba(170,189,89,0.08);
                        padding: 0.4rem 1rem; border-bottom: 1px solid var(--border); }
         .code-block pre { margin: 0; padding: 1rem; overflow-x: auto; }
         .code-block code { font-family: var(--font-mono); font-size: 0.85rem;
-                           line-height: 1.6; color: #c9d1d9; background: transparent;
+                           line-height: 1.6; color: #dad1c5; background: transparent;
                            border: none; padding: 0; }
-        .kw { color: #ff7b72; } .fn { color: #d2a8ff; } .str { color: #a5d6ff; }
-        .cm { color: #8b949e; font-style: italic; } .num { color: #79c0ff; }
-        .type { color: #ffa657; }
+        .kw { color: #de805a; } .fn { color: #d7bbdf; } .str { color: #bcdbd4; }
+        .cm { color: #a2978b; font-style: italic; } .num { color: #97cdc6; }
+        .type { color: #e3b174; }
         .table-wrap { overflow-x: auto; margin: 1.25rem 0; border-radius: 8px;
                       border: 1px solid var(--border); }
         table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -99,7 +99,7 @@
         td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--border);
              color: var(--text-secondary); }
         tr:last-child td { border-bottom: none; }
-        tr:nth-child(even) td { background: rgba(13, 17, 23, 0.5); }
+        tr:nth-child(even) td { background: rgba(35,30,26,0.5); }
         .diagram-vertical { display: flex; flex-direction: column; align-items: center;
                             gap: 0.3rem; margin: 1.5rem 0; padding: 1.5rem;
                             background: var(--bg-card); border: 1px solid var(--border);
@@ -111,7 +111,7 @@
                        border: 1px solid var(--border); border-radius: 6px;
                        color: var(--text-primary); text-align: center; white-space: nowrap; }
         .diagram-box.accent { border-color: var(--accent); color: var(--accent);
-                              background: rgba(118, 185, 0, 0.08); }
+                              background: rgba(170,189,89,0.08); }
         .diagram-grid { display: grid; gap: 0.75rem; margin: 1.5rem 0;
                         padding: 1.5rem; background: var(--bg-card);
                         border: 1px solid var(--border); border-radius: 8px; }
@@ -158,7 +158,7 @@
                  vertical-align: middle; margin-left: 0.3rem; }
         .badge.ok    { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
         .badge.warn  { border-color: var(--warm); color: var(--warm); background: var(--warm-dim); }
-        .badge.bad   { border-color: var(--bad); color: var(--bad); background: rgba(255,123,114,0.08); }
+        .badge.bad   { border-color: var(--bad); color: var(--bad); background: rgba(222,128,90,0.08); }
 
         /* Interactive prompt-shape visualiser */
         .prompt-stack { display: flex; flex-direction: column; gap: 0.4rem;
@@ -171,9 +171,9 @@
         .prompt-bar { flex: 1; padding: 0.6rem 0.9rem; border-radius: 4px;
                       font-family: var(--font-mono); font-size: 0.78rem;
                       display: flex; align-items: center; justify-content: space-between; }
-        .prompt-bar.cache-hot { background: rgba(118,185,0,0.16); border: 1px solid var(--accent); color: var(--accent); }
+        .prompt-bar.cache-hot { background: rgba(170,189,89,0.16); border: 1px solid var(--accent); color: var(--accent); }
         .prompt-bar.cache-warm { background: var(--warm-dim); border: 1px solid var(--warm); color: var(--warm); }
-        .prompt-bar.cache-cold { background: rgba(255,123,114,0.10); border: 1px solid var(--bad); color: var(--bad); }
+        .prompt-bar.cache-cold { background: rgba(222,128,90,0.10); border: 1px solid var(--bad); color: var(--bad); }
         .prompt-bar .tk { font-size: 0.7rem; opacity: 0.85; margin-left: 0.5rem; }
         .prompt-detail { margin-top: 0.5rem; padding: 0.85rem 1rem; background: var(--bg-code);
                          border: 1px solid var(--border); border-radius: 6px;
@@ -409,17 +409,17 @@
     <div class="canvas-wrap">
         <svg viewBox="0 0 720 280" width="720" height="280" xmlns="http://www.w3.org/2000/svg">
             <style>
-                .reg     { stroke: #21262d; }
-                .reg-hot { fill: rgba(118,185,0,0.10); stroke: #76B900; }
-                .reg-wrm { fill: rgba(255,166,87,0.10); stroke: #ffa657; }
-                .reg-cld { fill: rgba(255,123,114,0.10); stroke: #ff7b72; }
-                .lbl    { fill: #e6edf3; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; }
-                .lblc   { fill: #76B900; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; }
-                .lblw   { fill: #ffa657; }
-                .lblb   { fill: #ff7b72; }
-                .sub    { fill: #8b949e; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
-                .brk    { stroke: #76B900; stroke-width: 2; stroke-dasharray: 6 4; }
-                .brklbl { fill: #76B900; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+                .reg     { stroke: #3a322b; }
+                .reg-hot { fill: rgba(170,189,89,0.10); stroke: #aabd59; }
+                .reg-wrm { fill: rgba(227,177,116,0.10); stroke: #e3b174; }
+                .reg-cld { fill: rgba(222,128,90,0.10); stroke: #de805a; }
+                .lbl    { fill: #efe8dc; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; }
+                .lblc   { fill: #aabd59; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; }
+                .lblw   { fill: #e3b174; }
+                .lblb   { fill: #de805a; }
+                .sub    { fill: #a2978b; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+                .brk    { stroke: #aabd59; stroke-width: 2; stroke-dasharray: 6 4; }
+                .brklbl { fill: #aabd59; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
             </style>
 
             <rect class="reg reg-hot" x="40"  y="30" width="640" height="86" rx="4"/>
@@ -556,14 +556,14 @@ response = client.messages.create(
     <div class="canvas-wrap">
         <svg viewBox="0 0 660 220" width="660" height="220" xmlns="http://www.w3.org/2000/svg">
             <style>
-                .ax { stroke: #30363d; stroke-width: 1; }
-                .gr { stroke: #ff7b72; stroke-width: 2; fill: none; }   /* no cache */
-                .ca { stroke: #76B900; stroke-width: 2; fill: none; }   /* with cache */
-                .lbl{ fill: #8b949e; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+                .ax { stroke: #463e36; stroke-width: 1; }
+                .gr { stroke: #de805a; stroke-width: 2; fill: none; }   /* no cache */
+                .ca { stroke: #aabd59; stroke-width: 2; fill: none; }   /* with cache */
+                .lbl{ fill: #a2978b; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
                 .leg{ font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 600; }
-                .ttl{ fill: #76B900; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; }
-                .pt-no { fill: #ff7b72; }
-                .pt-ca { fill: #76B900; }
+                .ttl{ fill: #aabd59; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; }
+                .pt-no { fill: #de805a; }
+                .pt-ca { fill: #aabd59; }
             </style>
             <text class="ttl" x="20" y="22">Cumulative cost of a 5 000-token stable prefix vs turn count</text>
 
@@ -589,12 +589,12 @@ response = client.messages.create(
             <text class="lbl" x="50"  y="44" text-anchor="end">10x</text>
             <text class="lbl" x="50"  y="184" text-anchor="end">0</text>
 
-            <rect width="14" height="3" x="450" y="55" fill="#ff7b72"/>
-            <text class="leg" x="470" y="59" fill="#ff7b72">no cache</text>
-            <rect width="14" height="3" x="450" y="73" fill="#76B900"/>
-            <text class="leg" x="470" y="77" fill="#76B900">with cache</text>
+            <rect width="14" height="3" x="450" y="55" fill="#de805a"/>
+            <text class="leg" x="470" y="59" fill="#de805a">no cache</text>
+            <rect width="14" height="3" x="450" y="73" fill="#aabd59"/>
+            <text class="leg" x="470" y="77" fill="#aabd59">with cache</text>
 
-            <text class="lbl" x="540" y="138" fill="#76B900">~6&times; cheaper by turn 10</text>
+            <text class="lbl" x="540" y="138" fill="#aabd59">~6&times; cheaper by turn 10</text>
         </svg>
     </div>
 
